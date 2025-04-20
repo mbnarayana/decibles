@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decibel Meter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 flex items-center justify-center h-screen">
+    <div class="bg-white p-6 rounded-lg shadow-lg text-center">
+        <h1 class="text-2xl font-bold mb-4">Decibel Meter</h1>
+        <p id="status" class="text-gray-600 mb-4">Click "Start" to measure sound levels</p>
+        <p id="decibel" class="text-4xl font-semibold mb-4">-- dB</p>
+        <button id="toggleButton" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Start</button>
+    </div>
+
+    <script>
+        let audioContext;
+        let analyser;
+        let microphone;
+        let isRunning = false;
+        const decibelDisplay = document.getElementById('decibel');
+        const statusDisplay = document.getElementById('status');
+        const toggleButton = document.getElementById('toggleButton');
+
+        async function startMeasurement() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 2048;
+
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                microphone = audioContext.createMediaStreamSource(stream);
+                microphone.connect(analyser);
+
+                isRunning = true;
+                toggleButton.textContent = 'Stop';
+                statusDisplay.textContent = 'Measuring...';
+                updateDecibel();
+            } catch (err) {
+                statusDisplay.textContent = 'Error: Microphone access denied or not available';
+                console.error(err);
+            }
+        }
+
+        function stopMeasurement() {
+            if (microphone) {
+                microphone.mediaStream.getTracks().forEach(track => track.stop());
+            }
+            if (audioContext) {
+                audioContext.close();
+            }
+            isRunning = false;
+            toggleButton.textContent = 'Start';
+            statusDisplay.textContent = 'Measurement stopped';
+            decibelDisplay.textContent = '-- dB';
+        }
+
+        function updateDecibel() {
+            if (!isRunning) return;
+
+            const dataArray = new Float32Array(analyser.fftSize);
+            analyser.getFloatTimeDomainData(dataArray);
+
+            // Calculate RMS (Root Mean Square)
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                sum += dataArray[i] * dataArray[i];
+            }
+            const rms = Math.sqrt(sum / dataArray.length);
+
+            // Convert to decibels (relative to a reference level)
+            const ref = 0.00002; // Approximate reference pressure (threshold of human hearing)
+            const db = 20 * Math.log10(rms / ref);
+
+            // Display decibel value, ensure it's finite and positive
+            decibelDisplay.textContent = isFinite(db) && db > 0 ? db.toFixed(1) + ' dB' : '-- dB';
+
+            // Update every 100ms
+            if (isRunning) {
+                setTimeout(updateDecibel, 100);
+            }
+        }
+
+        toggleButton.addEventListener('click', () => {
+            if (isRunning) {
+                stopMeasurement();
+            } else {
+                startMeasurement();
+            }
+        });
+    </script>
+</body>
+</html>
